@@ -392,7 +392,7 @@ def main():
     retreivePageIDWithTitle("Onderzoekslogboek")
     getBlocksFromPage(main_page_id)
     getHeadingsFromBlocks()
-    #renumberAndUpdateHeading1Blocks()
+    renumberAndUpdateHeading1Blocks()
     getSyncedBlockPageID()
     getAllSyncedBlockContent()
 

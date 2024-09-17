@@ -102,12 +102,38 @@ def getNextBlocksFromPage(main_page_id, next_cursor):
     else:
         print(f"Error: {response.status_code}, {response.text}")
 
+def getHeadingsFromBlocks():
+    # Get all blocks that are of type heading_1, heading_2, heading_3
+    # Store them in a dictionary with the block id as key and the text as value
+    # Return the dictionary
+    
+    global all_heading_1_blocks
+    all_heading_1_blocks = {}
+    global all_heading_2_blocks
+    all_heading_2_blocks = {}
+    global all_heading_3_blocks
+    all_heading_3_blocks = {}
 
+    for block in all_blocks["results"]:
+        if block["type"] == "heading_1":
+            all_heading_1_blocks[block["id"]] = block["heading_1"]["rich_text"][0]["plain_text"]
+        elif block["type"] == "heading_2":
+            all_heading_2_blocks[block["id"]] = block["heading_2"]["rich_text"][0]["plain_text"]
+        elif block["type"] == "heading_3":
+            all_heading_3_blocks[block["id"]] = block["heading_3"]["rich_text"][0]["plain_text"]
+
+
+    print(all_heading_1_blocks)
+    print(all_heading_2_blocks)
+    print(all_heading_3_blocks)
+
+     
 
 def main():
     getEnvironmentVariables()
     setHeaders()
     retreivePageIDWithTitle("Onderzoekslogboek")
     getBlocksFromPage(main_page_id)
+    getHeadingsFromBlocks()
 
 main()

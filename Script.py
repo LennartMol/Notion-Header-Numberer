@@ -243,37 +243,148 @@ def getSyncedBlockHeaders(key):
     
 
     print(synced_block_headers2)
+    print(synced_block_headers3)
 
-    renumberAndUpdateHeading2Blocks(key)
+    renumberAndUpdateHeading2And3Blocks(key)
 
-def renumberAndUpdateHeading2Blocks(important_key):
-    """ Renumber the heading_2 blocks and update the blocks with the new values
-    """	
-
+def renumberAndUpdateHeading2And3Blocks(important_key):
+    """ 
+    Renumber the heading_2 blocks and heading_3 blocks and update the blocks with the new values
+    """
     global remove_chapter_number_pattern
     remove_chapter_number_pattern = r'^\d+(\.\d+)*\s*'
 
-    # Change the value of all_heading_1_blocks by removing the numbers in front of the heading. Numbers could be 1.2.3
+    # Remove old chapter numbers from both synced_block_headers2 (Heading 2) and synced_block_headers3 (Heading 3)
     for key in synced_block_headers2:
         synced_block_headers2[key] = re.sub(remove_chapter_number_pattern, '', synced_block_headers2[key])
 
-    print(synced_block_headers2)
+    for key in synced_block_headers3:
+        synced_block_headers3[key] = re.sub(remove_chapter_number_pattern, '', synced_block_headers3[key])
 
-    # The chapter is retreived from the heading_1 block key
+    print("Cleaned Heading 2:", synced_block_headers2)
+    print("Cleaned Heading 3:", synced_block_headers3)
+
+    # Retrieve the chapter number from the heading_1 block
     chapter = int(all_heading_1_blocks[important_key].split(" ", 1)[0])
-    
-    # Renumber the text values of synced_block_headers2
-    # for example {0: 'Hoofdvraag} becomes {0: '1.1 Hoofdvraag'}, adding '1.1 ' in front of the text
+
+    # Renumber the Heading 2 blocks
     subchapter = 1
-    for key in synced_block_headers2:
+    for key in sorted(synced_block_headers2.keys()):  # Sort by block keys for consistency
         synced_block_headers2[key] = f"{chapter}.{subchapter} {synced_block_headers2[key]}"  
         subchapter = subchapter + 1
 
-    print(synced_block_headers2)
+    print("Renumbered Heading 2:", synced_block_headers2)
 
+    # Renumber the Heading 3 blocks based on the closest Heading 2 block
+    sorted_heading2_keys = sorted(synced_block_headers2.keys())
+    subsubchapter_count = {key: 1 for key in sorted_heading2_keys}  # To track subsubchapters under each Heading 2 block
 
+    for key in sorted(synced_block_headers3.keys()):  # Sort Heading 3 blocks by their block IDs
+        # Find the closest Heading 2 block key that is <= the current Heading 3 block key
+        closest_heading2_key = max([k for k in sorted_heading2_keys if k <= key], default=None)
 
+        if closest_heading2_key is not None:
+            # Build the new number using the corresponding Heading 2's chapter number
+            heading2_number = synced_block_headers2[closest_heading2_key].split(" ", 1)[0]
+            subsubchapter = subsubchapter_count[closest_heading2_key]  # Get current subsubchapter count for this Heading 2
+            synced_block_headers3[key] = f"{heading2_number}.{subsubchapter} {synced_block_headers3[key]}"
 
+            # Increment the subsubchapter count for this Heading 2 block
+            subsubchapter_count[closest_heading2_key] += 1
+
+    print("Renumbered Heading 3:", synced_block_headers3)   
+
+    updateSyncedBlockHeaders()
+
+def updateSyncedBlockHeaders():
+    """ Update the synced block headers
+    """
+
+    for key in synced_block_headers2:
+        updateSyncedBlockHeading2(key, synced_block_headers2[key])
+
+    for key in synced_block_headers3:
+        updateSyncedBlockHeading3(key, synced_block_headers3[key])
+
+def updateSyncedBlockHeading2(block_key, newHeading2Value):
+    """ Update the synced block heading 2
+    """
+    
+    # Retrieve the block data from synced_block_data with block_key
+    block = synced_block_data["results"][block_key]
+
+    # Use the block data to send a PATCH request to the Notion blocks endpoint, only updating the 'plain_text' value to newHeadingValue
+    data = {
+        "heading_2": {
+            "rich_text": [
+                {
+                    "type": "text",
+                    "text": {
+                        "content": newHeading2Value,
+                        "link": None
+                    },
+                    "annotations": {
+                        "bold": False,
+                        "italic": False,
+                        "strikethrough": False,
+                        "underline": False,
+                        "code": False,
+                        "color": "default"
+                    },
+                    "plain_text": newHeading2Value,
+                    "href": None
+                }
+            ],
+            "is_toggleable": False,
+            "color": "default"
+        }
+    }
+
+    response = requests.patch(f'https://api.notion.com/v1/blocks/{block["id"]}', headers=HEADERS, data=json.dumps(data))
+    if response.status_code == 200:
+        print(f"Block {block_key} updated")
+    else:
+        print(f"Error: {response.status_code}, {response.text}")
+
+def updateSyncedBlockHeading3(block_key, newHeading3Value):
+    """ Update the synced block heading 3
+    """
+
+    # Retrieve the block data from synced_block_data with block_key
+    block = synced_block_data["results"][block_key]
+
+    # Use the block data to send a PATCH request to the Notion blocks endpoint, only updating the 'plain_text' value to newHeadingValue
+    data = {
+        "heading_3": {
+            "rich_text": [
+                {
+                    "type": "text",
+                    "text": {
+                        "content": newHeading3Value,
+                        "link": None
+                    },
+                    "annotations": {
+                        "bold": False,
+                        "italic": False,
+                        "strikethrough": False,
+                        "underline": False,
+                        "code": False,
+                        "color": "default"
+                    },
+                    "plain_text": newHeading3Value,
+                    "href": None
+                }
+            ],
+            "is_toggleable": False,
+            "color": "default"
+        }
+    }
+
+    response = requests.patch(f'https://api.notion.com/v1/blocks/{block["id"]}', headers=HEADERS, data=json.dumps(data))
+    if response.status_code == 200:
+        print(f"Block {block_key} updated")
+    else:
+        print(f"Error: {response.status_code}, {response.text}")
 
 def main():
     getEnvironmentVariables()

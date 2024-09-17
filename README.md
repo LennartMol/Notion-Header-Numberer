@@ -32,3 +32,7 @@ It can be used to only update Heading1 chapters by commenting out the following 
 
         getSyncedBlockPageID()
         getAllSyncedBlockContent()
+
+### Optimization: Skip Unchanged Headings
+
+To enhance performance and reduce unnecessary data usage, we could check if the chapter or heading content has changed before sending a PATCH request. If no changes are detected, the update request is skipped, resulting in faster execution and more efficient use of resources.

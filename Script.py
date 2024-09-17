@@ -16,7 +16,6 @@ def getEnvironmentVariables():
 def setHeaders():
     """ Sets headers for the API request
     """
-    getEnvironmentVariables()
 
     notion_latest_api_version = "2022-06-28"
 
@@ -31,7 +30,8 @@ def setHeaders():
 def retreivePageIDWithTitle(title):
     """ Retreives the page ID of a page with a given title
     """
-    setHeaders()
+
+    global main_page_id
 
     # Define the search payload
     data = {
@@ -47,9 +47,67 @@ def retreivePageIDWithTitle(title):
         print(json.dumps(search_results, indent=4))  # Print the result in a readable format
 
         # Get the page ID of the first result
-        page_id = search_results["results"][0]["id"]
-        print(f"Page ID: {page_id}")
+        main_page_id = search_results["results"][0]["id"]
+        print(f"Page ID: {main_page_id}")
     else:
         print(f"Error: {response.status_code}, {response.text}")
 
-retreivePageIDWithTitle("Onderzoekslogboek")
+def getBlocksFromPage(main_page_id):
+    """ Gets the blocks from a page
+    """
+
+    global all_blocks
+
+    # Send a GET request to the Notion blocks endpoint
+    response = requests.get(f'https://api.notion.com/v1/blocks/{main_page_id}/children', headers=HEADERS)
+
+    # Print the results (for example, to get block IDs)
+    if response.status_code == 200:
+        blocks = response.json()
+        print(json.dumps(blocks, indent=4))  # Print the result in a readable format
+        all_blocks = blocks
+        
+
+        # if blocks contains the 'has_more' key, it means there are more blocks to fetch
+        # retreive 'next_cursor' and make another request with the cursor
+        if blocks.get("has_more"):
+            getNextBlocksFromPage(main_page_id, blocks.get("next_cursor"))
+        else:
+            print("All blocks have been fetched")
+
+    else:
+        print(f"Error: {response.status_code}, {response.text}")
+
+def getNextBlocksFromPage(main_page_id, next_cursor):
+    """ Gets the next blocks from a page
+    """
+
+    # Send a GET request to the Notion blocks endpoint
+    response = requests.get(f'https://api.notion.com/v1/blocks/{main_page_id}/children', headers=HEADERS, params={"start_cursor": next_cursor})
+
+    # Print the results (for example, to get block IDs)
+    if response.status_code == 200:
+        blocks = response.json()
+        print(json.dumps(blocks, indent=4))  # Print the result in a readable format
+
+
+        all_blocks["results"] += blocks["results"]
+        # if blocks contains the 'has_more' key, it means there are more blocks to fetch
+        # retreive 'next_cursor' and make another request with the cursor
+        if blocks.get("has_more"):
+            getNextBlocksFromPage(main_page_id, blocks.get("next_cursor"))
+        else:
+            print("All blocks have been fetched")
+
+    else:
+        print(f"Error: {response.status_code}, {response.text}")
+
+
+
+def main():
+    getEnvironmentVariables()
+    setHeaders()
+    retreivePageIDWithTitle("Onderzoekslogboek")
+    getBlocksFromPage(main_page_id)
+
+main()

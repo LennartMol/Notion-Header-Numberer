@@ -219,7 +219,7 @@ def getAllSyncedBlockContent():
         getSyncedBlockContent(key)
 
                 
-def getSyncedBlockContent(key):
+def getSyncedBlockContent(key, next_cursor=None):
     """ Get the content of the synced block
     """
 
@@ -229,10 +229,23 @@ def getSyncedBlockContent(key):
     # send a GET request to the Notion blocks endpoint with the synced block page ID
     # print the content of the synced block
 
-    response = requests.get(f'https://api.notion.com/v1/blocks/{synced_block_page_id[key]}/children', headers=HEADERS)
+    response = requests.get(f'https://api.notion.com/v1/blocks/{synced_block_page_id[key]}/children', headers=HEADERS, params={"start_cursor": next_cursor})
     if response.status_code == 200:
-        synced_block_data = response.json()
-        getSyncedBlockHeaders(key)
+        
+        response_data = response.json()
+
+        if (next_cursor == None):
+            synced_block_data = response_data
+        else:
+            synced_block_data["results"] += response_data["results"]
+
+        if response_data.get("has_more"):
+            getSyncedBlockContent(key, response_data.get("next_cursor"))
+            logger.debug(f"There are more blocks to fetch")
+            logger.debug(f"Next cursor: {response_data.get('next_cursor')}")
+        else:
+            logger.debug(f"All blocks have been fetched")
+            getSyncedBlockHeaders(key)
     else:
         logger.error(f"Error: {response.status_code}, {response.text}")
 
@@ -411,7 +424,7 @@ def updateSyncedBlockHeading3(block_key, newHeading3Value):
         logger.error(f"Error: {response.status_code}, {response.text}")
 
 def main():
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     
     getEnvironmentVariables()
     setHeaders()

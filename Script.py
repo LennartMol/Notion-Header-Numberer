@@ -110,33 +110,32 @@ def getHeadingsFromBlocks():
     for block in all_blocks["results"]:
         if block["type"] == "heading_1":
             all_heading_1_blocks[all_blocks["results"].index(block)] = block["heading_1"]["rich_text"][0]["plain_text"]
-    
-    print(all_heading_1_blocks)
 
 
 def renumberAndUpdateHeading1Blocks():
     """ Renumber the heading_1 blocks and update the blocks with the new values
     """
-
+    global new_all_heading_1_blocks
+    new_all_heading_1_blocks = {}
 
     # Change the value of all_heading_1_blocks by removing the numbers in front of the heading
     for key in all_heading_1_blocks:
-        all_heading_1_blocks[key] = all_heading_1_blocks[key].split(" ", 1)[1]
-
-    print(all_heading_1_blocks)
+        new_all_heading_1_blocks[key] = all_heading_1_blocks[key].split(" ", 1)[1]
 
     # Renumber the text values of all_heading_1_blocks 
     # for example {85: 'Inleiding'} becomes {85: '1 Inleiding'}, adding '1 ' in front of the text
     chapter = 1
-    for key in all_heading_1_blocks:
-        all_heading_1_blocks[key] = f"{chapter} {all_heading_1_blocks[key]}"  
+    for key in new_all_heading_1_blocks:
+        new_all_heading_1_blocks[key] = f"{chapter} {new_all_heading_1_blocks[key]}"  
         chapter = chapter + 1  
-    
-    print(all_heading_1_blocks)
 
-    for key in all_heading_1_blocks:
-        # update the blocks with the new values
-        updateHeading1Block(key, all_heading_1_blocks[key])
+    for key in new_all_heading_1_blocks:
+        # check if the new value is different from the old value
+        if new_all_heading_1_blocks[key] != all_heading_1_blocks[key]:
+            # if the new value is different from the old value, update the block with the new value
+            updateHeading1Block(key, new_all_heading_1_blocks[key])
+        else: 
+            print(f"Heading 1: '{all_heading_1_blocks[key]}' has not been changed.")
 
 def updateHeading1Block(block_key, newHeading1Value):
     """ Updates a block with a new value
@@ -175,7 +174,7 @@ def updateHeading1Block(block_key, newHeading1Value):
 
     response = requests.patch(f'https://api.notion.com/v1/blocks/{block["id"]}', headers=HEADERS, data=json.dumps(data))
     if response.status_code == 200:
-        print(f"Block {block_key} updated")
+        print(f"Heading 1: '{all_heading_1_blocks[block_key]}' has been changed to '{newHeading1Value}'")
     else:
         print(f"Error: {response.status_code}, {response.text}")
 
@@ -192,7 +191,7 @@ def getSyncedBlockPageID():
     synced_block_page_id = {}
 
 
-    for key in all_heading_1_blocks:
+    for key in new_all_heading_1_blocks:
         for block in all_blocks["results"]:
             if block["type"] == "synced_block" and all_blocks["results"].index(block) > key:
                 # print index of synced block
@@ -265,7 +264,7 @@ def renumberAndUpdateHeading2And3Blocks(important_key):
     print("Cleaned Heading 3:", synced_block_headers3)
 
     # Retrieve the chapter number from the heading_1 block
-    chapter = int(all_heading_1_blocks[important_key].split(" ", 1)[0])
+    chapter = int(new_all_heading_1_blocks[important_key].split(" ", 1)[0])
 
     # Renumber the Heading 2 blocks
     subchapter = 1

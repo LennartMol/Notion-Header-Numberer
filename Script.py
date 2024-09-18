@@ -54,52 +54,29 @@ def retreivePageIDWithTitle(title):
     else:
         logger.error(f"Error: {response.status_code}, {response.text}")
 
-def getBlocksFromPage(main_page_id):
+def getBlocksFromPage(main_page_id, cursor=None):
     """ Gets the blocks from a page
     """
-
     global all_blocks
 
     # Send a GET request to the Notion blocks endpoint
-    response = requests.get(f'https://api.notion.com/v1/blocks/{main_page_id}/children', headers=HEADERS)
+    response = requests.get(f'https://api.notion.com/v1/blocks/{main_page_id}/children', headers=HEADERS, params={"start_cursor": cursor})
 
     # Print the results (for example, to get block IDs)
     if response.status_code == 200:
-        blocks = response.json()
-        all_blocks = blocks
+        response_data = response.json()
         
-
-        # if blocks contains the 'has_more' key, it means there are more blocks to fetch
-        # retreive 'next_cursor' and make another request with the cursor
-        if blocks.get("has_more"):
-            getNextBlocksFromPage(main_page_id, blocks.get("next_cursor"))
-            logger.debug(f"There are more blocks to fetch")
-            logger.debug(f"Next cursor: {blocks.get('next_cursor')}")
+        if (cursor == None):
+            all_blocks = response_data
         else:
-            logger.debug(f"All blocks have been fetched")
-
-    else:
-        logger.error(f"Error: {response.status_code}, {response.text}")
-
-def getNextBlocksFromPage(main_page_id, next_cursor):
-    """ Gets the next blocks from a page
-    """
-
-    # Send a GET request to the Notion blocks endpoint
-    response = requests.get(f'https://api.notion.com/v1/blocks/{main_page_id}/children', headers=HEADERS, params={"start_cursor": next_cursor})
-
-    # Print the results (for example, to get block IDs)
-    if response.status_code == 200:
-        blocks = response.json()
-
-
-        all_blocks["results"] += blocks["results"]
+            all_blocks["results"] += response_data["results"]
+        
         # if blocks contains the 'has_more' key, it means there are more blocks to fetch
         # retreive 'next_cursor' and make another request with the cursor
-        if blocks.get("has_more"):
-            getNextBlocksFromPage(main_page_id, blocks.get("next_cursor"))
+        if response_data.get("has_more"):
+            getBlocksFromPage(main_page_id, response_data.get("next_cursor"))
             logger.debug(f"There are more blocks to fetch")
-            logger.debug(f"Next cursor: {blocks.get('next_cursor')}")
+            logger.debug(f"Next cursor: {response_data.get('next_cursor')}")
         else:
             logger.debug(f"All blocks have been fetched")
 

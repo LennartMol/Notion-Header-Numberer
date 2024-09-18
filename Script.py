@@ -237,9 +237,6 @@ def getSyncedBlockHeaders(key):
             synced_block_headers2[synced_block_data["results"].index(block)] = block["heading_2"]["rich_text"][0]["plain_text"]
         if block["type"] == "heading_3":
             synced_block_headers3[synced_block_data["results"].index(block)] = block["heading_3"]["rich_text"][0]["plain_text"]
-    
-    
-    print(synced_block_headers3)
 
     renumberAndUpdateHeading2And3Blocks(key)
 
@@ -260,9 +257,7 @@ def renumberAndUpdateHeading2And3Blocks(important_key):
         new_synched_block_headers2[key] = re.sub(remove_chapter_number_pattern, '', synced_block_headers2[key])
 
     for key in synced_block_headers3:
-        synced_block_headers3[key] = re.sub(remove_chapter_number_pattern, '', synced_block_headers3[key])
-
-    print("Cleaned Heading 3:", synced_block_headers3)
+        new_synched_block_headers3[key] = re.sub(remove_chapter_number_pattern, '', synced_block_headers3[key])
 
     # Retrieve the chapter number from the heading_1 block
     chapter = int(new_all_heading_1_blocks[important_key].split(" ", 1)[0])
@@ -277,7 +272,7 @@ def renumberAndUpdateHeading2And3Blocks(important_key):
     sorted_heading2_keys = sorted(synced_block_headers2.keys())
     subsubchapter_count = {key: 1 for key in sorted_heading2_keys}  # To track subsubchapters under each Heading 2 block
 
-    for key in sorted(synced_block_headers3.keys()):  # Sort Heading 3 blocks by their block IDs
+    for key in sorted(new_synched_block_headers3.keys()):  # Sort Heading 3 blocks by their block IDs
         # Find the closest Heading 2 block key that is <= the current Heading 3 block key
         closest_heading2_key = max([k for k in sorted_heading2_keys if k <= key], default=None)
 
@@ -285,7 +280,7 @@ def renumberAndUpdateHeading2And3Blocks(important_key):
             # Build the new number using the corresponding Heading 2's chapter number
             heading2_number = new_synched_block_headers2[closest_heading2_key].split(" ", 1)[0]
             subsubchapter = subsubchapter_count[closest_heading2_key]  # Get current subsubchapter count for this Heading 2
-            synced_block_headers3[key] = f"{heading2_number}.{subsubchapter} {synced_block_headers3[key]}"
+            new_synched_block_headers3[key] = f"{heading2_number}.{subsubchapter} {new_synched_block_headers3[key]}"
 
             # Increment the subsubchapter count for this Heading 2 block
             subsubchapter_count[closest_heading2_key] += 1 
@@ -304,8 +299,13 @@ def updateSyncedBlockHeaders():
         else: 
             print(f"Heading 2: '{synced_block_headers2[key]}' has not been changed.")
 
-    for key in synced_block_headers3:
-        updateSyncedBlockHeading3(key, synced_block_headers3[key])
+    for key in new_synched_block_headers3:
+        # check if the new value is different from the old value
+        if new_synched_block_headers3[key] != synced_block_headers3[key]:
+            # if the new value is different from the old value, update the block with the new value
+            updateSyncedBlockHeading3(key, new_synched_block_headers3[key])
+        else: 
+            print(f"Heading 3: '{synced_block_headers3[key]}' has not been changed.")
 
 def updateSyncedBlockHeading2(block_key, newHeading2Value):
     """ Update the synced block heading 2
@@ -343,7 +343,6 @@ def updateSyncedBlockHeading2(block_key, newHeading2Value):
 
     response = requests.patch(f'https://api.notion.com/v1/blocks/{block["id"]}', headers=HEADERS, data=json.dumps(data))
     if response.status_code == 200:
-        print(f"Block {block_key} updated")
         print(f"Heading 2: '{synced_block_headers2[block_key]}' has been changed to '{newHeading2Value}'")
     else:
         print(f"Error: {response.status_code}, {response.text}")
@@ -384,7 +383,7 @@ def updateSyncedBlockHeading3(block_key, newHeading3Value):
 
     response = requests.patch(f'https://api.notion.com/v1/blocks/{block["id"]}', headers=HEADERS, data=json.dumps(data))
     if response.status_code == 200:
-        print(f"Block {block_key} updated")
+        print(f"Heading 3: '{synced_block_headers3[block_key]}' has been changed to '{newHeading3Value}'")
     else:
         print(f"Error: {response.status_code}, {response.text}")
 

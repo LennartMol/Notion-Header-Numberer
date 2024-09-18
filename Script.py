@@ -1,8 +1,9 @@
-import time
 import os
 import requests
 import json
 import re
+import logging
+logger = logging.getLogger(__name__)
 
 def getEnvironmentVariables():
     """ Gets environment variables and sets them in global variables
@@ -11,8 +12,9 @@ def getEnvironmentVariables():
     global NOTION_API_KEY
     NOTION_API_KEY = os.environ.get("NOTION_API_KEY")
     if NOTION_API_KEY == None:
-        print(f"\nMake sure to correctly set your environment variables.\n")
+        logger.error(f"Make sure to correctly set your environment variables.")
         exit()
+    logger.debug(f"Retreived NOTION_API_KEY: {NOTION_API_KEY}")
 
 def setHeaders():
     """ Sets headers for the API request
@@ -48,9 +50,9 @@ def retreivePageIDWithTitle(title):
 
         # Get the page ID of the first result
         main_page_id = search_results["results"][0]["id"]
-        print(f"Page ID: {main_page_id}")
+        logger.debug(f"Page ID: {main_page_id}")
     else:
-        print(f"Error: {response.status_code}, {response.text}")
+        logger.error(f"Error: {response.status_code}, {response.text}")
 
 def getBlocksFromPage(main_page_id):
     """ Gets the blocks from a page
@@ -71,11 +73,13 @@ def getBlocksFromPage(main_page_id):
         # retreive 'next_cursor' and make another request with the cursor
         if blocks.get("has_more"):
             getNextBlocksFromPage(main_page_id, blocks.get("next_cursor"))
+            logger.debug(f"There are more blocks to fetch")
+            logger.debug(f"Next cursor: {blocks.get('next_cursor')}")
         else:
-            print("All blocks have been fetched")
+            logger.debug(f"All blocks have been fetched")
 
     else:
-        print(f"Error: {response.status_code}, {response.text}")
+        logger.error(f"Error: {response.status_code}, {response.text}")
 
 def getNextBlocksFromPage(main_page_id, next_cursor):
     """ Gets the next blocks from a page
@@ -94,11 +98,13 @@ def getNextBlocksFromPage(main_page_id, next_cursor):
         # retreive 'next_cursor' and make another request with the cursor
         if blocks.get("has_more"):
             getNextBlocksFromPage(main_page_id, blocks.get("next_cursor"))
+            logger.debug(f"There are more blocks to fetch")
+            logger.debug(f"Next cursor: {blocks.get('next_cursor')}")
         else:
-            print("All blocks have been fetched")
+            logger.debug(f"All blocks have been fetched")
 
     else:
-        print(f"Error: {response.status_code}, {response.text}")
+        logger.error(f"Error: {response.status_code}, {response.text}")
 
 def getHeadingsFromBlocks():
     # Get all blocks that are of type heading_1
@@ -111,6 +117,8 @@ def getHeadingsFromBlocks():
         if block["type"] == "heading_1":
             all_heading_1_blocks[all_blocks["results"].index(block)] = block["heading_1"]["rich_text"][0]["plain_text"]
 
+    logger.debug(f"\nAll heading 1 blocks: \n{json.dumps(all_heading_1_blocks, indent=4)}")
+
 
 def renumberAndUpdateHeading1Blocks():
     """ Renumber the heading_1 blocks and update the blocks with the new values
@@ -122,6 +130,8 @@ def renumberAndUpdateHeading1Blocks():
     for key in all_heading_1_blocks:
         new_all_heading_1_blocks[key] = all_heading_1_blocks[key].split(" ", 1)[1]
 
+    logger.debug(f"\nStripped heading 1 blocks: \n{json.dumps(new_all_heading_1_blocks, indent=4)}")
+    
     # Renumber the text values of all_heading_1_blocks 
     # for example {85: 'Inleiding'} becomes {85: '1 Inleiding'}, adding '1 ' in front of the text
     chapter = 1
@@ -129,13 +139,15 @@ def renumberAndUpdateHeading1Blocks():
         new_all_heading_1_blocks[key] = f"{chapter} {new_all_heading_1_blocks[key]}"  
         chapter = chapter + 1  
 
+    logger.debug(f"\nRenumbered heading 1 blocks: \n{json.dumps(new_all_heading_1_blocks, indent=4)}")
+
     for key in new_all_heading_1_blocks:
         # check if the new value is different from the old value
         if new_all_heading_1_blocks[key] != all_heading_1_blocks[key]:
             # if the new value is different from the old value, update the block with the new value
             updateHeading1Block(key, new_all_heading_1_blocks[key])
         else: 
-            print(f"Heading 1: '{all_heading_1_blocks[key]}' has not been changed.")
+            logger.info(f"Heading 1: '{all_heading_1_blocks[key]}' has not been changed.")
 
 def updateHeading1Block(block_key, newHeading1Value):
     """ Updates a block with a new value
@@ -174,9 +186,9 @@ def updateHeading1Block(block_key, newHeading1Value):
 
     response = requests.patch(f'https://api.notion.com/v1/blocks/{block["id"]}', headers=HEADERS, data=json.dumps(data))
     if response.status_code == 200:
-        print(f"Heading 1: '{all_heading_1_blocks[block_key]}' has been changed to '{newHeading1Value}'")
+        logger.info(f"Heading 1: '{all_heading_1_blocks[block_key]}' has been changed to '{newHeading1Value}'")
     else:
-        print(f"Error: {response.status_code}, {response.text}")
+        logger.error(f"Error: {response.status_code}, {response.text}")
 
 def getSyncedBlockPageID():
     """ Get the page ID of the synced block
@@ -195,6 +207,7 @@ def getSyncedBlockPageID():
         for block in all_blocks["results"]:
             if block["type"] == "synced_block" and all_blocks["results"].index(block) > key:
                 # print index of synced block
+                logger.debug(f"Synced block index: {all_blocks['results'].index(block)}")
                 synced_block_page_id[key] = block["synced_block"]["synced_from"]["block_id"]
                 break
 
@@ -221,7 +234,7 @@ def getSyncedBlockContent(key):
         synced_block_data = response.json()
         getSyncedBlockHeaders(key)
     else:
-        print(f"Error: {response.status_code}, {response.text}")
+        logger.error(f"Error: {response.status_code}, {response.text}")
 
 def getSyncedBlockHeaders(key):
     """ Get the headers of the synced block
@@ -238,6 +251,9 @@ def getSyncedBlockHeaders(key):
         if block["type"] == "heading_3":
             synced_block_headers3[synced_block_data["results"].index(block)] = block["heading_3"]["rich_text"][0]["plain_text"]
 
+    logger.debug(f"\nAll heading 2 blocks: \n{json.dumps(synced_block_headers2, indent=4)}")
+    logger.debug(f"\nAll heading 3 blocks: \n{json.dumps(synced_block_headers3, indent=4)}")
+    
     renumberAndUpdateHeading2And3Blocks(key)
 
 def renumberAndUpdateHeading2And3Blocks(important_key):
@@ -259,6 +275,9 @@ def renumberAndUpdateHeading2And3Blocks(important_key):
     for key in synced_block_headers3:
         new_synched_block_headers3[key] = re.sub(remove_chapter_number_pattern, '', synced_block_headers3[key])
 
+    logger.debug(f"\nStripped heading 2 blocks: \n{json.dumps(new_synched_block_headers2, indent=4)}")
+    logger.debug(f"\nStripped heading 3 blocks: \n{json.dumps(new_synched_block_headers3, indent=4)}")
+
     # Retrieve the chapter number from the heading_1 block
     chapter = int(new_all_heading_1_blocks[important_key].split(" ", 1)[0])
 
@@ -267,6 +286,8 @@ def renumberAndUpdateHeading2And3Blocks(important_key):
     for key in sorted(new_synched_block_headers2.keys()):  # Sort by block keys for consistency
         new_synched_block_headers2[key] = f"{chapter}.{subchapter} {new_synched_block_headers2[key]}"  
         subchapter = subchapter + 1
+
+    logger.debug(f"\nRenumbered heading 2 blocks: \n{json.dumps(new_synched_block_headers2, indent=4)}")
 
     # Renumber the Heading 3 blocks based on the closest Heading 2 block
     sorted_heading2_keys = sorted(synced_block_headers2.keys())
@@ -285,6 +306,8 @@ def renumberAndUpdateHeading2And3Blocks(important_key):
             # Increment the subsubchapter count for this Heading 2 block
             subsubchapter_count[closest_heading2_key] += 1 
 
+    logger.debug(f"\nRenumbered heading 3 blocks: \n{json.dumps(new_synched_block_headers3, indent=4)}")
+
     updateSyncedBlockHeaders()
 
 def updateSyncedBlockHeaders():
@@ -297,7 +320,7 @@ def updateSyncedBlockHeaders():
             # if the new value is different from the old value, update the block with the new value
             updateSyncedBlockHeading2(key, new_synched_block_headers2[key])
         else: 
-            print(f"Heading 2: '{synced_block_headers2[key]}' has not been changed.")
+            logger.info(f"Heading 2: '{synced_block_headers2[key]}' has not been changed.")
 
     for key in new_synched_block_headers3:
         # check if the new value is different from the old value
@@ -305,7 +328,7 @@ def updateSyncedBlockHeaders():
             # if the new value is different from the old value, update the block with the new value
             updateSyncedBlockHeading3(key, new_synched_block_headers3[key])
         else: 
-            print(f"Heading 3: '{synced_block_headers3[key]}' has not been changed.")
+            logger.info(f"Heading 3: '{synced_block_headers3[key]}' has not been changed.")
 
 def updateSyncedBlockHeading2(block_key, newHeading2Value):
     """ Update the synced block heading 2
@@ -343,9 +366,9 @@ def updateSyncedBlockHeading2(block_key, newHeading2Value):
 
     response = requests.patch(f'https://api.notion.com/v1/blocks/{block["id"]}', headers=HEADERS, data=json.dumps(data))
     if response.status_code == 200:
-        print(f"Heading 2: '{synced_block_headers2[block_key]}' has been changed to '{newHeading2Value}'")
+        logger.info(f"Heading 2: '{synced_block_headers2[block_key]}' has been changed to '{newHeading2Value}'")
     else:
-        print(f"Error: {response.status_code}, {response.text}")
+        logger.error(f"Error: {response.status_code}, {response.text}")
 
 def updateSyncedBlockHeading3(block_key, newHeading3Value):
     """ Update the synced block heading 3
@@ -383,11 +406,13 @@ def updateSyncedBlockHeading3(block_key, newHeading3Value):
 
     response = requests.patch(f'https://api.notion.com/v1/blocks/{block["id"]}', headers=HEADERS, data=json.dumps(data))
     if response.status_code == 200:
-        print(f"Heading 3: '{synced_block_headers3[block_key]}' has been changed to '{newHeading3Value}'")
+        logger.info(f"Heading 3: '{synced_block_headers3[block_key]}' has been changed to '{newHeading3Value}'")
     else:
-        print(f"Error: {response.status_code}, {response.text}")
+        logger.error(f"Error: {response.status_code}, {response.text}")
 
 def main():
+    logging.basicConfig(level=logging.INFO)
+    
     getEnvironmentVariables()
     setHeaders()
     retreivePageIDWithTitle("Onderzoekslogboek")

@@ -1,5 +1,7 @@
 import os
 import requests
+import aiohttp
+import asyncio
 import json
 import re
 import logging
@@ -15,6 +17,9 @@ global all_new_synced_block_headers2
 all_new_synced_block_headers2 = []
 global all_new_synced_block_headers3
 all_new_synced_block_headers3 = []
+
+MAX_RETRIES = 5  # Maximum number of retries
+RETRY_DELAY = 2  # Initial delay between retries in seconds
 
 def getEnvironmentVariables():
     """ Gets environment variables and sets them in global variables
@@ -108,7 +113,7 @@ def getHeadingsFromBlocks():
     logger.debug(f"\nAll heading 1 blocks: \n{json.dumps(all_heading_1_blocks, indent=4)}")
 
 
-def renumberAndUpdateHeading1Blocks():
+def renumberHeading1Blocks():
     """ Renumber the heading_1 blocks and update the blocks with the new values
     """
     global new_all_heading_1_blocks
@@ -129,30 +134,17 @@ def renumberAndUpdateHeading1Blocks():
 
     logger.debug(f"\nRenumbered heading 1 blocks: \n{json.dumps(new_all_heading_1_blocks, indent=4)}")
 
-    for key in new_all_heading_1_blocks:
-        # check if the new value is different from the old value
-        if new_all_heading_1_blocks[key] != all_heading_1_blocks[key]:
-            # if the new value is different from the old value, update the block with the new value
-            updateHeadingBlock(key, new_all_heading_1_blocks[key], all_heading_1_blocks[key], headingNumber=1)
-        else: 
-            logger.info(f"Heading 1: '{all_heading_1_blocks[key]}' has not been changed.")
+async def sendRequestToUpdateHeadingBlock(block_key, newHeadingValue, oldHeadingValue, headingNumber, indexSyncedBlock=None):
+    """ Updates a block with a new value and retries if a conflict error (409) occurs """
 
-def updateHeadingBlock(block_key, newHeadingValue, oldHeadingValue, headingNumber, indexSyncedBlock=None):
-    """ Updates a block with a new value
-    """
-
-    # retreive block data from all_blocks with block_key
-
+    # Retrieve block data from all_blocks with block_key
     if headingNumber == 1:
         block = all_blocks["results"][block_key]
     else:
         block = all_synced_blocks[indexSyncedBlock]["results"][block_key]
-    # use block data to send a PATCH request to the Notion blocks endpoint, only updating the 'plain_text' value to newHeadingValue
-    # example from block[85]: {'object': 'block', 'id': '8994839b-782b-4f8d-afa8-3118539119e1', 'parent': {'type': 'page_id', 'page_id': '673e1892-3d00-467d-a4f8-010301092f9d'}, 'created_time': '2024-09-09T13:03:00.000Z', 'last_edited_time': '2024-09-17T11:42:00.000Z', 'created_by': {'object': 'user', 'id': '45f88c9c-b81b-453f-8ccb-5209de4bedd0'}, 'last_edited_by': {'object': 'user', 'id': '45f88c9c-b81b-453f-8ccb-5209de4bedd0'}, 'has_children': False, 'archived': False, 'in_trash': False, 'type': 'heading_1', 'heading_1': {'rich_text': [{'type': 'text', 'text': {'content': '2 Inleiding', 'link': None}, 'annotations': {'bold': False, 'italic': False, 'strikethrough': False, 'underline': False, 'code': False, 'color': 'default'}, 'plain_text': '2 Inleiding', 'href': None}], 'is_toggleable': False, 'color': 'default'}}
 
     heading_number = f"heading_{headingNumber}"  # heading_1, heading_2, heading_3, etc.
 
-    
     data = {
         heading_number: {
             "rich_text": [
@@ -179,11 +171,32 @@ def updateHeadingBlock(block_key, newHeadingValue, oldHeadingValue, headingNumbe
         }
     }
 
-    response = requests.patch(f'https://api.notion.com/v1/blocks/{block["id"]}', headers=HEADERS, data=json.dumps(data))
-    if response.status_code == 200:
-        logger.info(f"Heading {headingNumber}: '{oldHeadingValue}' has been changed to '{newHeadingValue}'")
-    else:
-        logger.error(f"Error: {response.status_code}, {response.text}")
+    retries = 0
+    while retries < MAX_RETRIES:
+        try:
+            # Send PATCH request using aiohttp for async requests
+            async with aiohttp.ClientSession() as session:
+                async with session.patch(f'https://api.notion.com/v1/blocks/{block["id"]}', headers=HEADERS, data=json.dumps(data)) as response:
+                    if response.status == 200:
+                        logger.info(f"Heading {headingNumber}: '{oldHeadingValue}' has been changed to '{newHeadingValue}'")
+                        return
+                    elif response.status == 409:
+                        # Conflict error, retry with backoff
+                        logger.warning(f"Conflict error: {response.status}. Retrying {retries + 1}/{MAX_RETRIES}...")
+                        retries += 1
+                        await asyncio.sleep(RETRY_DELAY * retries)  # Exponential backoff
+                    else:
+                        # Log other errors and break the loop
+                        error_message = await response.text()
+                        logger.error(f"Error: {response.status}, {error_message}")
+                        break
+        except aiohttp.ClientError as e:
+            # Catch any client-related errors (network issues, etc.)
+            logger.error(f"Request failed due to client error: {e}")
+            retries += 1
+            await asyncio.sleep(RETRY_DELAY * retries)  # Retry after backoff
+
+    logger.error(f"Failed to update block '{block['id']}' after {MAX_RETRIES} retries.")
 
 def getSyncedBlockPageID():
     """ Get the page ID of the synced block
@@ -266,9 +279,9 @@ def getSyncedBlockHeaders(key):
     logger.debug(f"\nAll heading 2 blocks: \n{json.dumps(synced_block_headers2, indent=4)}")
     logger.debug(f"\nAll heading 3 blocks: \n{json.dumps(synced_block_headers3, indent=4)}")
     
-    renumberAndUpdateHeading2And3Blocks(key)
+    renumberHeading2And3Blocks(key)
 
-def renumberAndUpdateHeading2And3Blocks(important_key):
+def renumberHeading2And3Blocks(important_key):
     """ 
     Renumber the heading_2 blocks and heading_3 blocks and update the blocks with the new values
     """
@@ -322,40 +335,70 @@ def renumberAndUpdateHeading2And3Blocks(important_key):
     all_new_synced_block_headers3.append(new_synched_block_headers3)
     logger.debug(f"\nRenumbered heading 3 blocks: \n{json.dumps(new_synched_block_headers3, indent=4)}")
 
-def updateSyncedBlockHeaders():
-    """ Update the synced block headers
-    """
-    for index in range(len(all_new_synced_block_headers2)):
-        
-        for key in all_new_synced_block_headers2[index]:
-        # check if the new value is different from the old value
-            if all_new_synced_block_headers2[index][key] != all_old_synced_block_headers2[index][key]:
-                # if the new value is different from the old value, update the block with the new value
-                updateHeadingBlock(key, all_new_synced_block_headers2[index][key], all_old_synced_block_headers2[index][key], headingNumber=2, indexSyncedBlock=index)
+async def updateAllHeaders():
+    """ Update the headers asynchronously if they have changed """
+    
+    async def check_and_update_blocks(blocks, new_blocks, old_blocks, heading_number, index_synced_block=None):
+        """ Helper function to check if a block's heading value has changed and update if necessary """
+        tasks = []
+        for key in new_blocks:
+            # check if the new value is different from the old value
+            if new_blocks[key] != old_blocks[key]:
+                # add the task to update the block with the new value
+                tasks.append(sendRequestToUpdateHeadingBlock(
+                    block_key=key,
+                    newHeadingValue=new_blocks[key],
+                    oldHeadingValue=old_blocks[key],
+                    headingNumber=heading_number,
+                    indexSyncedBlock=index_synced_block
+                ))
             else: 
-                logger.info(f"Heading 2: '{all_new_synced_block_headers2[index][key]}' has not been changed.")
+                logger.info(f"Heading {heading_number}: '{old_blocks[key]}' has not been changed.")
+        if tasks:
+            await asyncio.gather(*tasks)  # Run all tasks concurrently
 
+    # Update heading 1 blocks
+    await check_and_update_blocks(
+        all_heading_1_blocks, 
+        new_all_heading_1_blocks, 
+        all_heading_1_blocks, 
+        heading_number=1
+    )
+    
+    # Update heading 2 blocks
+    for index in range(len(all_new_synced_block_headers2)):
+        await check_and_update_blocks(
+            all_old_synced_block_headers2[index], 
+            all_new_synced_block_headers2[index], 
+            all_old_synced_block_headers2[index], 
+            heading_number=2, 
+            index_synced_block=index
+        )
+
+    # Update heading 3 blocks
     for index in range(len(all_new_synced_block_headers3)):
-            
-        for key in all_new_synced_block_headers3[index]:
-        # check if the new value is different from the old value
-            if all_new_synced_block_headers3[index][key] != all_old_synced_block_headers3[index][key]:
-                # if the new value is different from the old value, update the block with the new value
-                updateHeadingBlock(key, all_new_synced_block_headers3[index][key], all_old_synced_block_headers3[index][key], headingNumber=3, indexSyncedBlock=index)
-            else: 
-                logger.info(f"Heading 3: '{all_new_synced_block_headers3[index][key]}' has not been changed.")
+        await check_and_update_blocks(
+            all_old_synced_block_headers3[index], 
+            all_new_synced_block_headers3[index], 
+            all_old_synced_block_headers3[index], 
+            heading_number=3, 
+            index_synced_block=index
+        )
+
 
 def main():
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     
     getEnvironmentVariables()
     setHeaders()
     retreivePageIDWithTitle("Onderzoekslogboek")
     getBlocksFromPage(main_page_id)
     getHeadingsFromBlocks()
-    renumberAndUpdateHeading1Blocks()
+    renumberHeading1Blocks()
+
     getSyncedBlockPageID()
     getAllSyncedBlockContent()
-    updateSyncedBlockHeaders()
+
+    asyncio.run(updateAllHeaders())
 
 main()

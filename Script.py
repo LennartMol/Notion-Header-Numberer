@@ -122,26 +122,33 @@ def renumberAndUpdateHeading1Blocks():
         # check if the new value is different from the old value
         if new_all_heading_1_blocks[key] != all_heading_1_blocks[key]:
             # if the new value is different from the old value, update the block with the new value
-            updateHeading1Block(key, new_all_heading_1_blocks[key])
+            updateHeadingBlock(key, new_all_heading_1_blocks[key], all_heading_1_blocks[key], headingNumber=1)
         else: 
             logger.info(f"Heading 1: '{all_heading_1_blocks[key]}' has not been changed.")
 
-def updateHeading1Block(block_key, newHeading1Value):
+def updateHeadingBlock(block_key, newHeadingValue, oldHeadingValue, headingNumber):
     """ Updates a block with a new value
     """
 
     # retreive block data from all_blocks with block_key
-    block = all_blocks["results"][block_key]
+
+    if headingNumber == 1:
+        block = all_blocks["results"][block_key]
+    else:
+        block = synced_block_data["results"][block_key]
     # use block data to send a PATCH request to the Notion blocks endpoint, only updating the 'plain_text' value to newHeadingValue
     # example from block[85]: {'object': 'block', 'id': '8994839b-782b-4f8d-afa8-3118539119e1', 'parent': {'type': 'page_id', 'page_id': '673e1892-3d00-467d-a4f8-010301092f9d'}, 'created_time': '2024-09-09T13:03:00.000Z', 'last_edited_time': '2024-09-17T11:42:00.000Z', 'created_by': {'object': 'user', 'id': '45f88c9c-b81b-453f-8ccb-5209de4bedd0'}, 'last_edited_by': {'object': 'user', 'id': '45f88c9c-b81b-453f-8ccb-5209de4bedd0'}, 'has_children': False, 'archived': False, 'in_trash': False, 'type': 'heading_1', 'heading_1': {'rich_text': [{'type': 'text', 'text': {'content': '2 Inleiding', 'link': None}, 'annotations': {'bold': False, 'italic': False, 'strikethrough': False, 'underline': False, 'code': False, 'color': 'default'}, 'plain_text': '2 Inleiding', 'href': None}], 'is_toggleable': False, 'color': 'default'}}
 
+    heading_number = f"heading_{headingNumber}"  # heading_1, heading_2, heading_3, etc.
+
+    
     data = {
-        "heading_1": {
+        heading_number: {
             "rich_text": [
                 {
                     "type": "text",
                     "text": {
-                        "content": newHeading1Value,
+                        "content": newHeadingValue,
                         "link": None
                     },
                     "annotations": {
@@ -152,7 +159,7 @@ def updateHeading1Block(block_key, newHeading1Value):
                         "code": False,
                         "color": "default"
                     },
-                    "plain_text": newHeading1Value,
+                    "plain_text": newHeadingValue,
                     "href": None
                 }
             ],
@@ -163,7 +170,7 @@ def updateHeading1Block(block_key, newHeading1Value):
 
     response = requests.patch(f'https://api.notion.com/v1/blocks/{block["id"]}', headers=HEADERS, data=json.dumps(data))
     if response.status_code == 200:
-        logger.info(f"Heading 1: '{all_heading_1_blocks[block_key]}' has been changed to '{newHeading1Value}'")
+        logger.info(f"Heading {headingNumber}: '{oldHeadingValue}' has been changed to '{newHeadingValue}'")
     else:
         logger.error(f"Error: {response.status_code}, {response.text}")
 
@@ -308,7 +315,7 @@ def updateSyncedBlockHeaders():
         # check if the new value is different from the old value
         if new_synched_block_headers2[key] != synced_block_headers2[key]:
             # if the new value is different from the old value, update the block with the new value
-            updateSyncedBlockHeading2(key, new_synched_block_headers2[key])
+            updateHeadingBlock(key, new_synched_block_headers2[key], synced_block_headers2[key], headingNumber=2)
         else: 
             logger.info(f"Heading 2: '{synced_block_headers2[key]}' has not been changed.")
 
@@ -316,89 +323,9 @@ def updateSyncedBlockHeaders():
         # check if the new value is different from the old value
         if new_synched_block_headers3[key] != synced_block_headers3[key]:
             # if the new value is different from the old value, update the block with the new value
-            updateSyncedBlockHeading3(key, new_synched_block_headers3[key])
+            updateHeadingBlock(key, new_synched_block_headers3[key], synced_block_headers3[key], headingNumber=3)
         else: 
             logger.info(f"Heading 3: '{synced_block_headers3[key]}' has not been changed.")
-
-def updateSyncedBlockHeading2(block_key, newHeading2Value):
-    """ Update the synced block heading 2
-    """
-    
-    # Retrieve the block data from synced_block_data with block_key
-    block = synced_block_data["results"][block_key]
-
-    # Use the block data to send a PATCH request to the Notion blocks endpoint, only updating the 'plain_text' value to newHeadingValue
-    data = {
-        "heading_2": {
-            "rich_text": [
-                {
-                    "type": "text",
-                    "text": {
-                        "content": newHeading2Value,
-                        "link": None
-                    },
-                    "annotations": {
-                        "bold": False,
-                        "italic": False,
-                        "strikethrough": False,
-                        "underline": False,
-                        "code": False,
-                        "color": "default"
-                    },
-                    "plain_text": newHeading2Value,
-                    "href": None
-                }
-            ],
-            "is_toggleable": False,
-            "color": "default"
-        }
-    }
-
-    response = requests.patch(f'https://api.notion.com/v1/blocks/{block["id"]}', headers=HEADERS, data=json.dumps(data))
-    if response.status_code == 200:
-        logger.info(f"Heading 2: '{synced_block_headers2[block_key]}' has been changed to '{newHeading2Value}'")
-    else:
-        logger.error(f"Error: {response.status_code}, {response.text}")
-
-def updateSyncedBlockHeading3(block_key, newHeading3Value):
-    """ Update the synced block heading 3
-    """
-
-    # Retrieve the block data from synced_block_data with block_key
-    block = synced_block_data["results"][block_key]
-
-    # Use the block data to send a PATCH request to the Notion blocks endpoint, only updating the 'plain_text' value to newHeadingValue
-    data = {
-        "heading_3": {
-            "rich_text": [
-                {
-                    "type": "text",
-                    "text": {
-                        "content": newHeading3Value,
-                        "link": None
-                    },
-                    "annotations": {
-                        "bold": False,
-                        "italic": False,
-                        "strikethrough": False,
-                        "underline": False,
-                        "code": False,
-                        "color": "default"
-                    },
-                    "plain_text": newHeading3Value,
-                    "href": None
-                }
-            ],
-            "is_toggleable": False,
-            "color": "default"
-        }
-    }
-
-    response = requests.patch(f'https://api.notion.com/v1/blocks/{block["id"]}', headers=HEADERS, data=json.dumps(data))
-    if response.status_code == 200:
-        logger.info(f"Heading 3: '{synced_block_headers3[block_key]}' has been changed to '{newHeading3Value}'")
-    else:
-        logger.error(f"Error: {response.status_code}, {response.text}")
 
 def main():
     logging.basicConfig(level=logging.DEBUG)
